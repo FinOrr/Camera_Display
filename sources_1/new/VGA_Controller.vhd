@@ -6,6 +6,9 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity VGA_Controller is
+    Generic (
+        Pixel_Clk_Freq : in natural
+    );
     Port (
         -- Inputs
         Clk          : in std_logic;
@@ -21,6 +24,9 @@ entity VGA_Controller is
 end VGA_Controller;
 
 architecture Behavioral of VGA_Controller is
+    
+    -- The VGA clock is driven by the system clock, being enabled at the pixel clock freqency using a Clock Enable (CE)
+    signal Pixel_CE : std_logic := '0';
     
     -- The active signal is used to signal the active region of the screen (when not blank)
     signal ACTIVE  : std_logic_vector(3 downto 0) := x"0";
@@ -45,6 +51,16 @@ architecture Behavioral of VGA_Controller is
 
     -- Frame Buffer register address
     signal Adr : unsigned(FB_ADR_BUS_WIDTH-1 downto 0) := (others => '0');
+    
+    component Pulse_Generator is
+        generic (
+            Frequency : natural
+        );
+        port (
+            Clk      : in  std_logic;
+            o_Signal : out std_logic
+        );
+    end component;
     
 begin
     
@@ -72,20 +88,20 @@ begin
     VGA_Green   <= i_Pixel_Data(7 downto 4);
     VGA_Blue    <= i_Pixel_Data(7 downto 4);
     
-    Address_Fetch: process(Clk)
+    Address_Fetch: process(Clk, Pixel_CE)
     begin
-        if (rising_edge(Clk)) then
+        if (rising_edge(Clk) AND Pixel_CE = '1') then
             if (Adr = FRAME_PIXELS-1) then
                 Adr <= (others => '0');
-            else
+            elsif (ACTIVE = "1111") then
                 Adr <= Adr + 1;
             end if;
         end if;
     end process;
     
-    Horizontal_Counter: process (Clk)
+    Horizontal_Counter: process (Clk, Pixel_CE)
     begin
-        if (rising_edge(Clk)) then
+        if (rising_edge(Clk) and Pixel_CE = '1') then
             if (h_cntr = (H_MAX - 1)) then
                 h_cntr <= (others =>'0');
             else
@@ -94,9 +110,9 @@ begin
         end if;
     end process;
 
-    Vertical_Counter: process (Clk)
+    Vertical_Counter: process (Clk, Pixel_CE)
     begin
-        if (rising_edge(Clk)) then
+        if (rising_edge(Clk) and Pixel_CE = '1') then
             if ((h_cntr = (H_MAX - 1)) and (v_cntr = (V_MAX - 1))) then
                 v_cntr <= (others =>'0');
             elsif (h_cntr = (H_MAX - 1)) then
@@ -106,9 +122,9 @@ begin
     end process;
 
      -- Horizontal sync
-    HSync_Generator: process (Clk)
+    HSync_Generator: process (Clk, Pixel_CE)
     begin
-        if (rising_edge(Clk)) then
+        if (rising_edge(Clk) and Pixel_CE = '1') then
             if (h_cntr >= (H_FP + FRAME_WIDTH - 1)) and (h_cntr < (H_FP + FRAME_WIDTH + H_SP - 1)) then
                 HSync <= H_POL;
             else
@@ -118,9 +134,9 @@ begin
     end process;
 
     -- Vertical sync
-    VSync_Generator: process (Clk)
+    VSync_Generator: process (Clk, Pixel_CE)
     begin
-        if (rising_edge(Clk)) then
+        if (rising_edge(Clk) AND Pixel_CE = '1') then
             if (v_cntr >= (V_FP + FRAME_HEIGHT - 1)) and (v_cntr < (V_FP + FRAME_HEIGHT + V_SP - 1)) then
                 VSync <= V_POL;
             else
@@ -128,5 +144,14 @@ begin
             end if;
         end if;
     end process;
-     
+    
+    Pixel_Clock_Driver: Pulse_Generator
+        generic map (
+            Frequency   => Pixel_Clk_Freq
+        )
+        port map (
+            Clk => Clk,
+            o_Signal => Pixel_CE
+        );
+             
 end Behavioral;

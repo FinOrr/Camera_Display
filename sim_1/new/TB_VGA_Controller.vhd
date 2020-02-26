@@ -36,6 +36,9 @@ end TB_VGA_Controller;
 architecture Behavioral of TB_VGA_Controller is
 
     component VGA_Controller is
+        generic (
+            Pixel_Clk_Freq  : natural
+        );
         port (
             -- Inputs
             Clk          : in std_logic;
@@ -69,6 +72,9 @@ begin
     end process;
     
     UUT: VGA_Controller
+        generic map (
+            Pixel_Clk_Freq => 25_000_000
+        )
         port map (
             Clk         => Clk,
             i_Pixel_Data=> Pixel_Data,
